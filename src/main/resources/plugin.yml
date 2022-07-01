@@ -1,0 +1,9 @@
+name: Fraktionen
+version: '${project.version}'
+main: com.tom.fraktionen.Main
+api-version: 1.16
+authors: [ Tom ]
+description: Fraktionen
+commands:
+  fraktion:
+    description: Fraktion info
