@@ -1,9 +1,13 @@
 package com.tom.fraktionen;
 
+import com.tom.fraktionen.commands.ChatCommand;
 import com.tom.fraktionen.commands.FactionCommand;
+import com.tom.fraktionen.handlers.MessageHandler;
 import com.tom.fraktionen.sql.MySQL;
 import com.tom.fraktionen.sql.SQLMethods;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class Main extends JavaPlugin {
@@ -62,8 +66,9 @@ public final class Main extends JavaPlugin {
 
 
     public void registerMyCommands(){
-        FactionCommand cmds = new FactionCommand(this);
-        getCommand("fraktion").setExecutor(cmds);
+        getCommand("fraktion").setExecutor(new FactionCommand(this));
+
+        getCommand("f").setExecutor(new ChatCommand(this));
     }
 
 
@@ -73,5 +78,23 @@ public final class Main extends JavaPlugin {
 
     public String getPrefix() {
         return prefix;
+    }
+
+    public void messageToAllMember(Player p, String message) {
+        MessageHandler mm = new MessageHandler();
+        String faction = SQLMethods.getPlayerFaction(p.getName());
+        int rank = SQLMethods.getPlayerRank(p.getName());
+        String rankName = SQLMethods.getRankName(faction, rank);
+
+        for(Player all : Bukkit.getOnlinePlayers()) {
+            if(SQLMethods.getPlayerFaction(all.getName()) != null) {
+                if(SQLMethods.getPlayerFaction(all.getName()).equalsIgnoreCase(faction)) {
+                    all.sendMessage(mm.getMessage("Commands.MessageFChatFormat")
+                            .replace("%rankname%", rankName)
+                            .replace("%name%", p.getName())
+                            .replace("%message%", message));
+                }
+            }
+        }
     }
 }

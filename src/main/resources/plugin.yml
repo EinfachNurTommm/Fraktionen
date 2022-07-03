@@ -7,3 +7,5 @@ description: Fraktionen
 commands:
   fraktion:
     description: Fraktion info
+  f:
+    description: Fraktions chat

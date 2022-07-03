@@ -6,7 +6,6 @@ import org.bukkit.entity.Player;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 
@@ -15,11 +14,18 @@ public class SQLMethods {
     private static Main plugin;
 
     public SQLMethods(Main plugin) {
-        this.plugin = plugin;
+        SQLMethods.plugin = plugin;
     }
 
-
-    public static boolean createFaction(String name, int id, String b, Player p, int balance) {
+    /**
+     * Create Faction
+     * @param name
+     * @param id
+     * @param b
+     * @param p
+     * @param balance
+     */
+    public static void createFaction(String name, int id, String b, Player p, int balance) {
 
         /*
         DataManager dataManager = new DataManager();
@@ -38,23 +44,26 @@ public class SQLMethods {
 
         Faction fa = new Faction(name, id, factionType, starvalPlayer, balance);
         */
-        plugin.sql.update("INSERT INTO `Factions`(`Name`, `Id`, `Type`, `Owner`, `Balance`) VALUES ('" + name + "','" + id + "','" + b + "','" + p.getName() + "','" + balance + "')");
-        return true;
+        Main.sql.update("INSERT INTO `Factions`(`Name`, `Id`, `Type`, `Owner`, `Balance`) VALUES ('" + name + "','" + id + "','" + b + "','" + p.getName() + "','" + balance + "')");
+        Main.sql.update("INSERT INTO `Members`(`Name`, `Fraktion`, `ID`, `Rang`) VALUES ('" + p.getName() + "','" + name + "','" + id + "','6');");
+        Main.sql.update("INSERT INTO `Ranks`(`Fraktion`) VALUES ('" + name + "');");
     }
 
-    public static boolean deleteFaction(String name) {
-        plugin.sql.update("DELETE FROM `Factions` WHERE `Name` = \"" + name + "\";");
-        return true;
+    public static void deleteFaction(String name) {
+        List<String> members;
+        members = getFactionMember(name);
+        for (String member : members) {
+            removePlayerFaction(member);
+        }
+        Main.sql.update("DELETE FROM `Factions` WHERE `Name` = \"" + name + "\";");
     }
 
 
     public static List<String> getFactionList() {
         List<String> liste = new ArrayList<>();
-        String s;
-        //Faction fa = null;
         try {
 
-            ResultSet rs = plugin.sql.query("SELECT `Name` FROM `Factions`;");
+            ResultSet rs = Main.sql.query("SELECT `Name` FROM `Factions`;");
 
             while (rs.next()) {
                 liste.add(rs.getString("Name"));
@@ -67,26 +76,31 @@ public class SQLMethods {
     }
 
 
-    public static boolean setFactionLeader(String name, Player p) {
-        plugin.sql.update("UPDATE `Factions` SET `Owner`='" + p.getName() + "' WHERE `Name` = \"" + name + "\";");
-        return true;
+    // Faction Member/Leader
+
+    public static void setFactionLeader(String name, Player p) {
+        Main.sql.update("UPDATE `Factions` SET `Owner`='" + p.getName() + "' WHERE `Name` = \"" + name + "\";");
+        if(getPlayerFaction(p.getName()) == null) {
+            Main.sql.update("INSERT INTO `Members`(`Name`, `Fraktion`, `ID`, `Rang`) VALUES ('" + p.getName() + "','" + name + "','" + getFactionId(name) + "','6');");
+        } else {
+            Main.sql.update("UPDATE `Members` SET `Fraktion`='" + name + "',`ID`='" + getFactionId(name) + "',`Rang`='6' WHERE `Name` = \"" + p.getName() + "\";");
+        }
     }
 
-
-    public static String getFactionLeader(String name) {
-        String s = "";
+    public static List<String> getFactionLeader(String name) {
+        List<String> owners = new ArrayList<>();
         try {
 
-            ResultSet rs = plugin.sql.query("SELECT `Owner` FROM `Factions` WHERE `Name` = \"" + name + "\";");
+            ResultSet rs = Main.sql.query("SELECT `Name` FROM `Members` WHERE `Fraktion` = \"" + name + "\" AND `Rang` >=5;");
 
             while (rs.next()) {
-                s = rs.getString("Owner");
+                owners.add(rs.getString("Name"));
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
 
-        return s;
+        return owners;
     }
 
 
@@ -95,7 +109,7 @@ public class SQLMethods {
 
         try {
 
-            ResultSet rs = plugin.sql.query("SELECT `Name`, `Rang` FROM `Members` WHERE `Fraktion` = \"" + name + "\";");
+            ResultSet rs = Main.sql.query("SELECT `Name` FROM `Members` WHERE `Fraktion` = \"" + name + "\" AND `Rang` < 5;");
 
             while (rs.next()) {
                 members.add(rs.getString("Name"));
@@ -108,23 +122,19 @@ public class SQLMethods {
     }
 
 
-    public static boolean setPlayerFaction(String faction, Player p) {
-        plugin.sql.update("INSERT INTO `Members`(`Name`, `Fraktion`, `ID`, `Rang`) VALUES ('" + p.getName() + "','" + faction + "','" + getFactionId(faction) + "','0');");
-        return true;
-    }
+    // Player Rank
 
-    public static boolean removePlayerFaction(Player p) {
-        plugin.sql.update("DELETE FROM `Members` WHERE `Name` = \"" + p.getName() + "\";");
-        return true;
-    }
 
+    public static void setPlayerRank(String p, int rank) {
+        Main.sql.update("UPDATE `Members` SET `Rang`='" + rank + "' WHERE `Name` = \"" + p + "\";");
+    }
 
     public static int getPlayerRank(String name) {
         int i = -1;
 
         try {
 
-            ResultSet rs = plugin.sql.query("SELECT `Rang` FROM `Members` WHERE `Name` = \"" + name + "\";");
+            ResultSet rs = Main.sql.query("SELECT `Rang` FROM `Members` WHERE `Name` = \"" + name + "\";");
 
             while (rs.next()) {
                 i = rs.getInt("Rang");
@@ -137,19 +147,29 @@ public class SQLMethods {
     }
 
 
+    // Player Faction Methods
+
+    public static void setPlayerFaction(String faction, Player p) {
+        Main.sql.update("INSERT INTO `Members`(`Name`, `Fraktion`, `ID`, `Rang`) VALUES ('" + p.getName() + "','" + faction + "','" + getFactionId(faction) + "','0');");
+    }
+
+    public static void removePlayerFaction(String p) {
+        Main.sql.update("DELETE FROM `Members` WHERE `Name` = \"" + p + "\";");
+    }
+
     public static String getPlayerFaction(String p) {
         String s = null;
 
         try {
 
-            ResultSet rs = plugin.sql.query("SELECT `Fraktion` FROM `Members` WHERE `Name` = \"" + p + "\";");
+            ResultSet rs = Main.sql.query("SELECT `Fraktion` FROM `Members` WHERE `Name` = \"" + p + "\";");
 
             while (rs.next()) {
                 s = rs.getString("Fraktion");
             }
 
             if(s == null || s.equals("")) {
-                ResultSet rs1 = plugin.sql.query("SELECT `Name` FROM `Factions` WHERE `Owner` = \"" + p + "\";");
+                ResultSet rs1 = Main.sql.query("SELECT `Name` FROM `Factions` WHERE `Owner` = \"" + p + "\";");
 
                 while (rs1.next()) {
                     s = rs1.getString("Name");
@@ -163,12 +183,14 @@ public class SQLMethods {
     }
 
 
+    // Get Faction Methods
+
 
     public static String getFactionId(String name) {
         String s = "";
         try {
 
-            ResultSet rs = plugin.sql.query("SELECT `Id` FROM `Factions` WHERE `Name` = \"" + name + "\";");
+            ResultSet rs = Main.sql.query("SELECT `Id` FROM `Factions` WHERE `Name` = \"" + name + "\";");
 
             while (rs.next()) {
                 s = rs.getString("Id");
@@ -184,7 +206,7 @@ public class SQLMethods {
         String s = "";
         try {
 
-            ResultSet rs = plugin.sql.query("SELECT `Name` FROM `Factions` WHERE `Id` = \"" + id + "\";");
+            ResultSet rs = Main.sql.query("SELECT `Name` FROM `Factions` WHERE `Id` = \"" + id + "\";");
 
             while (rs.next()) {
                 s = rs.getString("Name");
@@ -197,13 +219,58 @@ public class SQLMethods {
     }
 
 
-    public static boolean factionExists(String name) {
-        String s = "";
-        int i = -1;
-        boolean exist = true;
+    public static int getFactionBalance(String name) {
+        int balance = -1;
+
         try {
 
-            ResultSet rs = plugin.sql.query("SELECT count(`Name`) FROM `Factions` WHERE `Name` = \"" + name + "\";");
+            ResultSet rs = Main.sql.query("SELECT `Balance` FROM `Factions` WHERE `Name` = \"" + name + "\";");
+
+            while (rs.next()) {
+                balance = rs.getInt("Balance");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return balance;
+    }
+
+
+
+
+
+    //Rank names
+
+    public static void setRankName(String faction, int rank, String rankName) {
+        Main.sql.update("UPDATE `Ranks` SET `" + rank + "`='" + rankName + "' WHERE `Fraktion` = \"" + faction + "\";");
+    }
+
+    public static String getRankName(String faction, int rank) {
+        String rankName = null;
+
+        try {
+
+            ResultSet rs = Main.sql.query("SELECT `0`, `1`, `2`, `3`, `4`, `5`, `6` FROM `Ranks` WHERE `Fraktion` = \"" + faction + "\";");
+
+            while (rs.next()) {
+                rankName = rs.getString(rank);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return rankName;
+    }
+
+
+    // Exist Methods
+
+    public static boolean factionExists(String name) {
+        int i = -1;
+        try {
+
+            ResultSet rs = Main.sql.query("SELECT count(`Name`) FROM `Factions` WHERE `Name` = \"" + name + "\";");
 
             while (rs.next()) {
                 //s = rs.getString("count(`Name`)");
@@ -214,11 +281,7 @@ public class SQLMethods {
             return true;
         }
 
-        if(i == 0) {
-            return false;
-        } else {
-            return true;
-        }
+        return i != 0;
     }
 
     public static boolean factionIdExists(int id) {
@@ -226,7 +289,7 @@ public class SQLMethods {
         boolean exist = true;
         try {
 
-            ResultSet rs = plugin.sql.query("SELECT `Id` FROM `Factions` WHERE `Id` = " + id + ";");
+            ResultSet rs = Main.sql.query("SELECT `Id` FROM `Factions` WHERE `Id` = " + id + ";");
 
             while (rs.next()) {
                 i = rs.getInt("Id");
@@ -253,8 +316,6 @@ public class SQLMethods {
 
         return id;
     }
-
-
 
 
 

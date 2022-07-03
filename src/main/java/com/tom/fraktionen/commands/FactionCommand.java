@@ -3,6 +3,7 @@ package com.tom.fraktionen.commands;
 import com.tom.fraktionen.Main;
 import com.tom.fraktionen.def.FactionInvite;
 import com.tom.fraktionen.handlers.MessageHandler;
+import com.tom.fraktionen.handlers.PermissionHandler;
 import com.tom.fraktionen.sql.SQLMethods;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.HoverEvent;
@@ -14,16 +15,19 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Pose;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class FactionCommand implements CommandExecutor , TabCompleter {
 
 
     MessageHandler mm = new MessageHandler();
+    PermissionHandler pp = new PermissionHandler();
 
     private List<FactionInvite> invites = new ArrayList<FactionInvite>();
 
@@ -148,7 +152,7 @@ public class FactionCommand implements CommandExecutor , TabCompleter {
                 }
 
             } else if(args[0].equalsIgnoreCase("invite")) {
-                if(p.hasPermission("faction.invite")) {
+                if(p.hasPermission("faction.invite") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.invite")) {
                     if(args.length == 2) {
                         Player newP = Bukkit.getPlayer(args[1]);
                         if(newP != null) {
@@ -226,20 +230,20 @@ public class FactionCommand implements CommandExecutor , TabCompleter {
 
                 if(invitation != null) {
                     Player inviteSender = Bukkit.getPlayer(name);
-                    inviteSender.sendMessage(mm.getMessage("Commands.MessageDenyFactionInvite"));
-                    p.sendMessage(mm.getMessage("Commands.MessageDenyFactionPlayer"));
+                    inviteSender.sendMessage(mm.getMessage("Commands.MessageDenyFactionInvite").replace("%name%", inviteSender.getName()));
+                    p.sendMessage(mm.getMessage("Commands.MessageDenyFactionPlayer").replace("%faction%", SQLMethods.getPlayerFaction(name)));
                     invites.remove(invitation);
                 } else {
                     p.sendMessage(mm.getMessage("Commands.MessageAcceptNoInvite").replace("%name%", args[1]));
                 }
 
             } else if(args[0].equalsIgnoreCase("uninvite")) {
-                if(p.hasPermission("faction.uninvite")) {
+                if(p.hasPermission("faction.uninvite") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.kick")) {
                     if(args.length == 2) {
                         Player newP = Bukkit.getPlayer(args[1]);
                         if (newP != null) {
                             if(SQLMethods.getPlayerFaction(args[1]) != null) {
-                                SQLMethods.removePlayerFaction(newP);
+                                SQLMethods.removePlayerFaction(newP.getName());
                                 newP.sendMessage(mm.getMessage("Commands.MessageKickSuccess").replace("%name%", p.getName())
                                         .replace("%clan%", SQLMethods.getPlayerFaction(p.getName())));
                                 p.sendMessage(mm.getMessage("Commands.MessageKickRemoved").replace("%name%", newP.getName()));
@@ -257,6 +261,7 @@ public class FactionCommand implements CommandExecutor , TabCompleter {
                 }
 
             } else if(args[0].equalsIgnoreCase("setrank")) {
+                int rankNeeded = pp.getMessage("Permission.setrank");
                 if(args.length == 3) {
                     boolean isNumeric = args[2].chars().allMatch( Character::isDigit );
                     if(isNumeric) {
@@ -264,21 +269,58 @@ public class FactionCommand implements CommandExecutor , TabCompleter {
                         if(rang <= 6 && rang >= 0) {
                             Player myP = Bukkit.getPlayer(args[1]);
                             if(myP != null) {
-                                if(SQLMethods.getPlayerRank(p.getName()) >=5) {
-                                    if(SQLMethods.getPlayerFaction(p.getName()) == SQLMethods.getPlayerFaction(myP.getName())) {
-                                        if(SQLMethods.getPlayerRank(p.getName()) > SQLMethods.getPlayerRank(myP.getName())) {
-
+                                if(SQLMethods.getPlayerRank(p.getName()) >=rankNeeded) {
+                                    if(!(SQLMethods.getPlayerRank(p.getName()) == rankNeeded && rang >=rankNeeded)) {
+                                        if(Objects.equals(SQLMethods.getPlayerFaction(p.getName()), SQLMethods.getPlayerFaction(myP.getName()))) {
+                                            if(SQLMethods.getPlayerRank(p.getName()) >= SQLMethods.getPlayerRank(myP.getName())) {
+                                                if(!(SQLMethods.getPlayerRank(p.getName()) == rankNeeded && rang < rankNeeded)) {
+                                                    SQLMethods.setPlayerRank(myP.getName(), rang);
+                                                    p.sendMessage(mm.getMessage("Commands.MessageSetRankSuccess").replace("%name%", myP.getName())
+                                                            .replace("%rank%", rang+""));
+                                                    myP.sendMessage(mm.getMessage("Commands.MessageSetRankPlayer").replace("%name%", p.getName())
+                                                            .replace("%rang%", rang+""));
+                                                } else {
+                                                    p.sendMessage(mm.getMessage("Commands.MessageSetRankHigherRank").replace("%name%", myP.getName()));
+                                                }
+                                            } else {
+                                                p.sendMessage(mm.getMessage("Commands.MessageSetRankHigherRank").replace("%name%", myP.getName()));
+                                            }
+                                        } else {
+                                            p.sendMessage(mm.getMessage("Commands.MessageSetRankFailed").replace("%name%", myP.getName()));
                                         }
+                                    } else {
+                                        p.sendMessage(mm.getMessage("Commands.MessageSetRankHigherRank").replace("%name%", myP.getName()));
                                     }
+                                } else {
+                                    p.sendMessage(mm.getMessage("Commands.MessageSetRankHigherRank").replace("%name%", myP.getName()));
                                 }
+                            } else {
+                                p.sendMessage(mm.getMessage("Commands.MessageSetLeaderFailed").replace("%name%", args[1]));
                             }
+                        } else {
+                            p.sendMessage(mm.getMessage("Commands.MessageSetRankNumberBetween"));
                         }
+                    } else {
+                        p.sendMessage(mm.getMessage("Commands.MessageSetRankMustNumber"));
                     }
+                } else {
+                    p.sendMessage(mm.getMessage("Commands.SetRank"));
                 }
-
 
             } else if(args[0].equalsIgnoreCase("kasse")) {
                 if(args[1].equalsIgnoreCase("einzahlen")) {
+                    if(SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.kasse.einzahlen")) {
+                        boolean isNumeric = args[2].chars().allMatch( Character::isDigit );
+                        if(isNumeric) {
+                            int amount = Integer.parseInt(args[2]);
+                            //TODO Abfragen, ob Spieler genug Geld hat
+                            if(amount > 1) {
+
+                            } else {
+
+                            }
+                        }
+                    }
 
                 } else if(args[1].equalsIgnoreCase("auszahlen")) {
 
@@ -315,22 +357,20 @@ public class FactionCommand implements CommandExecutor , TabCompleter {
             p.sendMessage(mm.getMessage("Commands.DisplayCreate"));
         if (p.hasPermission("faction.delete"))
             p.sendMessage(mm.getMessage("Commands.DisplayDelete"));
-        if (p.hasPermission("faction.list"))
-            p.sendMessage(mm.getMessage("Commands.DisplayList"));
+        p.sendMessage(mm.getMessage("Commands.DisplayList"));
         if (p.hasPermission("faction.reset"))
             p.sendMessage(mm.getMessage("Commands.Reset"));
         if (p.hasPermission("faction.setleader"))
             p.sendMessage(mm.getMessage("Commands.SetLeader"));
-        if (p.hasPermission("faction.info"))
-            p.sendMessage(mm.getMessage("Commands.DisplayInfo"));
-        if (p.hasPermission("faction.setrank"))
+        p.sendMessage(mm.getMessage("Commands.DisplayInfo"));
+        if (p.hasPermission("faction.setrank") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.setrank"))
             p.sendMessage(mm.getMessage("Commands.SetRank"));
-        if (p.hasPermission("faction.kasse"))
+        if (p.hasPermission("faction.kasse") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.kasse.einzahlen"))
             p.sendMessage(mm.getMessage("Commands.Kasse"));
-        if (p.hasPermission("faction.invite"))
+        if (p.hasPermission("faction.invite") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.invite"))
             p.sendMessage(mm.getMessage("Commands.DisplayInvite"));
         p.sendMessage(mm.getMessage("Commands.DisplayAccept"));
-        if (p.hasPermission("faction.uninvite"))
+        if (p.hasPermission("faction.uninvite") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.kick"))
             p.sendMessage(mm.getMessage("Commands.DisplayKick"));
         if (p.hasPermission("faction.reload"))
             p.sendMessage(mm.getMessage("Commands.Reload"));
@@ -349,18 +389,18 @@ public class FactionCommand implements CommandExecutor , TabCompleter {
             if(p.hasPermission("faction.delete")) {
                 list.add("delete");
             }
-            if(p.hasPermission("faction.invite")) {
+            if(p.hasPermission("faction.invite") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.invite")) {
                 list.add("invite");
             }
-            if(p.hasPermission("faction.uninvite")) {
+            list.add("accept");
+
+            if(p.hasPermission("faction.uninvite") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.kick")) {
                 list.add("uninvite");
             }
-            if(p.hasPermission("faction.info")) {
-                list.add("info");
-            }
-            if(p.hasPermission("faction.list")) {
-                list.add("list");
-            }
+
+            list.add("info");
+            list.add("list");
+
             if(p.hasPermission("faction.reload")) {
                 list.add("reload");
             }
@@ -370,39 +410,41 @@ public class FactionCommand implements CommandExecutor , TabCompleter {
             if(p.hasPermission("faction.reset")) {
                 list.add("reset");
             }
-            if(p.hasPermission("faction.setrank")) {
+            if(p.hasPermission("faction.setrank") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.setrank")) {
                 list.add("setrank");
             }
-            if(p.hasPermission("faction.kasse")) {
+            if(p.hasPermission("faction.kasse") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.kasse.einzahlen")) {
                 list.add("kasse");
             }
-            list.add("accept");
         } else if(args.length == 2) {
             if(args[0].equalsIgnoreCase("info")) {
-                if(p.hasPermission("faction.info")) {
-                    list = SQLMethods.getFactionList();
-                }
+                list = SQLMethods.getFactionList();
+
             } else if(args[0].equalsIgnoreCase("invite")) {
-                if(p.hasPermission("faction.invite")) {
+                if(p.hasPermission("faction.invite") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.invite")) {
                     for(Player all : Bukkit.getOnlinePlayers()) {
                         list.add(all.getName());
                     }
                 }
             } else if(args[0].equalsIgnoreCase("uninvite")) {
-                if(p.hasPermission("faction.uninvite")) {
+                if(p.hasPermission("faction.uninvite") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.kick")) {
+                    for(Player all : Bukkit.getOnlinePlayers()) {
+                        list.add(all.getName());
+                    }
+                }
+            } else if(args[0].equalsIgnoreCase("setrank")) {
+                if(p.hasPermission("faction.setrank") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.setrank")) {
                     for(Player all : Bukkit.getOnlinePlayers()) {
                         list.add(all.getName());
                     }
                 }
             } else if(args[0].equalsIgnoreCase("setleader")) {
                 if(p.hasPermission("faction.setleader")) {
-                    for(Player all : Bukkit.getOnlinePlayers()) {
-                        list.add(all.getName());
-                    }
+                    list = SQLMethods.getFactionList();
                 }
             } else if(args[0].equalsIgnoreCase("reset")) {
                 list = SQLMethods.getFactionList();
-            } else if(args[0].equalsIgnoreCase("kasse")) {
+            } else if(args[0].equalsIgnoreCase("kasse") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.kasse.einzahlen")) {
                 list.add("einzahlen");
                 list.add("auszahlen");
                 list.add("info");
@@ -415,6 +457,7 @@ public class FactionCommand implements CommandExecutor , TabCompleter {
                     list.add("b");
                 }
             } else if(args[0].equalsIgnoreCase("setrank")) {
+                if(p.hasPermission("faction.setrank") || SQLMethods.getPlayerRank(p.getName()) >= pp.getMessage("Permission.setrank"))
                 list.add("0");
                 list.add("1");
                 list.add("2");
@@ -422,6 +465,12 @@ public class FactionCommand implements CommandExecutor , TabCompleter {
                 list.add("4");
                 list.add("5");
                 list.add("6");
+            } else if(args[0].equalsIgnoreCase("setleader")) {
+                if(p.hasPermission("faction.setleader")) {
+                    for(Player all : Bukkit.getOnlinePlayers()) {
+                        list.add(all.getName());
+                    }
+                }
             }
         }
 
